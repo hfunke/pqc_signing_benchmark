@@ -1,5 +1,7 @@
 # PQC Signing Benchmark
 
+[![Rust](https://github.com/hfunke/pqc_signing_benchmark/actions/workflows/rust.yml/badge.svg)](https://github.com/hfunke/pqc_signing_benchmark/actions/workflows/rust.yml)
+
 A simple benchmark for comparing the performance of different post-quantum cryptography (PQC) signing algorithms. Written in Rust as a command line tool to ensure it runs on various operating systems.
 
 ## Algorithms
