@@ -60,6 +60,11 @@ Example output (Apple M3, 10 cycles):
 └────────────────┴────────────┴────────────┴────────────┘
 ```
 
+Notes:
+* ML-DSA-65/87: The signature sizes in pqcrypto v0.18.1 are 3309 and 4627 bytes respectively — the FIPS 204 draft values (3293 / 4595) differ.
+
+* Falcon-padded: The library buffers up to the respective maximum length (666 / 1280 bytes), not to separate, larger fixed values.
+
 ## Dependencies
 
 - [`pqcrypto v0.18.1`](https://crates.io/crates/pqcrypto) — Rust bindings to the NIST PQC reference implementations in C
@@ -68,4 +73,4 @@ Example output (Apple M3, 10 cycles):
 
 ## License
 
-MIT
+MIT license

@@ -194,3 +194,170 @@ fn main() {
         ("Falcon-1024-padded", &falcon1024p),
     ]);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pqcrypto::sign;
+    use pqcrypto::traits::sign::{DetachedSignature, PublicKey, SecretKey};
+
+    // --- BenchResult: Berechnungslogik ---
+
+    #[test]
+    fn bench_result_ms_per_op_correct() {
+        let r = BenchResult {
+            cycles: 10,
+            keygen_ns: 10_000_000,
+            sign_ns: 5_000_000,
+            verify_ns: 2_000_000,
+            pk_bytes: 0,
+            sk_bytes: 0,
+            sig_bytes: 0,
+        };
+        assert!((r.keygen_ms_per_op() - 1.0).abs() < 1e-9);
+        assert!((r.sign_ms_per_op()   - 0.5).abs() < 1e-9);
+        assert!((r.verify_ms_per_op() - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn bench_result_single_cycle() {
+        let r = BenchResult {
+            cycles: 1,
+            keygen_ns: 1_000_000,
+            sign_ns: 500_000,
+            verify_ns: 200_000,
+            pk_bytes: 0,
+            sk_bytes: 0,
+            sig_bytes: 0,
+        };
+        assert!((r.keygen_ms_per_op() - 1.0).abs() < 1e-9);
+        assert!((r.sign_ms_per_op()   - 0.5).abs() < 1e-9);
+        assert!((r.verify_ms_per_op() - 0.2).abs() < 1e-9);
+    }
+
+    // --- Roundtrip: sign → verify je Algorithmus-Familie ---
+
+    #[test]
+    fn mldsa44_sign_verify_roundtrip() {
+        let msg = b"test message";
+        let (pk, sk) = sign::mldsa44::keypair();
+        let sig = sign::mldsa44::detached_sign(msg, &sk);
+        assert!(sign::mldsa44::verify_detached_signature(&sig, msg, &pk).is_ok());
+    }
+
+    #[test]
+    fn falcon512_sign_verify_roundtrip() {
+        let msg = b"test message";
+        let (pk, sk) = sign::falcon512::keypair();
+        let sig = sign::falcon512::detached_sign(msg, &sk);
+        assert!(sign::falcon512::verify_detached_signature(&sig, msg, &pk).is_ok());
+    }
+
+    #[test]
+    fn sphincssha2128f_sign_verify_roundtrip() {
+        // Schnellste SPHINCS+-Variante, um Testlaufzeit gering zu halten
+        let msg = b"test message";
+        let (pk, sk) = sign::sphincssha2128fsimple::keypair();
+        let sig = sign::sphincssha2128fsimple::detached_sign(msg, &sk);
+        assert!(sign::sphincssha2128fsimple::verify_detached_signature(&sig, msg, &pk).is_ok());
+    }
+
+    // --- Negativtests: Manipulation wird erkannt ---
+
+    #[test]
+    fn mldsa44_verify_fails_on_wrong_message() {
+        let (pk, sk) = sign::mldsa44::keypair();
+        let sig = sign::mldsa44::detached_sign(b"original", &sk);
+        assert!(sign::mldsa44::verify_detached_signature(&sig, b"tampered", &pk).is_err());
+    }
+
+    #[test]
+    fn mldsa44_verify_fails_on_wrong_key() {
+        let (_pk1, sk) = sign::mldsa44::keypair();
+        let (pk2, _)   = sign::mldsa44::keypair();
+        let sig = sign::mldsa44::detached_sign(b"msg", &sk);
+        assert!(sign::mldsa44::verify_detached_signature(&sig, b"msg", &pk2).is_err());
+    }
+
+    // --- Schlüssel- und Signaturgrößen gegen NIST-Spezifikation (FIPS 204 / 206) ---
+
+    #[test]
+    fn mldsa44_key_and_sig_sizes() {
+        let (pk, sk) = sign::mldsa44::keypair();
+        let sig = sign::mldsa44::detached_sign(b"x", &sk);
+        assert_eq!(pk.as_bytes().len(), 1312);
+        assert_eq!(sk.as_bytes().len(), 2560);
+        assert_eq!(sig.as_bytes().len(), 2420);
+    }
+
+    #[test]
+    fn mldsa65_key_and_sig_sizes() {
+        let (pk, sk) = sign::mldsa65::keypair();
+        let sig = sign::mldsa65::detached_sign(b"x", &sk);
+        assert_eq!(pk.as_bytes().len(), 1952);
+        assert_eq!(sk.as_bytes().len(), 4032);
+        assert_eq!(sig.as_bytes().len(), 3309);
+    }
+
+    #[test]
+    fn mldsa87_key_and_sig_sizes() {
+        let (pk, sk) = sign::mldsa87::keypair();
+        let sig = sign::mldsa87::detached_sign(b"x", &sk);
+        assert_eq!(pk.as_bytes().len(), 2592);
+        assert_eq!(sk.as_bytes().len(), 4896);
+        assert_eq!(sig.as_bytes().len(), 4627);
+    }
+
+    #[test]
+    fn falcon512_sig_size_within_spec_max() {
+        // Falcon-Signaturen sind variabel; Max laut FIPS 206: 666 Byte
+        let (pk, sk) = sign::falcon512::keypair();
+        let sig = sign::falcon512::detached_sign(b"x", &sk);
+        assert_eq!(pk.as_bytes().len(), 897);
+        assert_eq!(sk.as_bytes().len(), 1281);
+        assert!(sig.as_bytes().len() <= 666);
+    }
+
+    #[test]
+    fn falcon_padded512_sig_size_fixed() {
+        // Padded-Variante füllt immer auf die Maximallänge auf (666 B)
+        let (pk, sk) = sign::falconpadded512::keypair();
+        let sig = sign::falconpadded512::detached_sign(b"x", &sk);
+        assert_eq!(pk.as_bytes().len(), 897);
+        assert_eq!(sk.as_bytes().len(), 1281);
+        assert_eq!(sig.as_bytes().len(), 666);
+    }
+
+    #[test]
+    fn falcon_padded1024_sig_size_fixed() {
+        // Padded-Variante füllt immer auf die Maximallänge auf (1280 B)
+        let (pk, sk) = sign::falconpadded1024::keypair();
+        let sig = sign::falconpadded1024::detached_sign(b"x", &sk);
+        assert_eq!(pk.as_bytes().len(), 1793);
+        assert_eq!(sk.as_bytes().len(), 2305);
+        assert_eq!(sig.as_bytes().len(), 1280);
+    }
+
+    // --- Grenzfall: leere Nachricht ---
+
+    #[test]
+    fn sign_verify_empty_message() {
+        let (pk, sk) = sign::mldsa44::keypair();
+        let sig = sign::mldsa44::detached_sign(b"", &sk);
+        assert!(sign::mldsa44::verify_detached_signature(&sig, b"", &pk).is_ok());
+    }
+
+    // --- benchmark()-Funktion: Zyklenanzahl und Zeitmessung ---
+
+    #[test]
+    fn benchmark_respects_cycles_and_records_timings() {
+        let result = bench!("ML-DSA-44", 2, b"test", mldsa44);
+        assert_eq!(result.cycles, 2);
+        assert!(result.keygen_ns > 0);
+        assert!(result.sign_ns > 0);
+        assert!(result.verify_ns > 0);
+        assert!(result.pk_bytes > 0);
+        assert!(result.sk_bytes > 0);
+        assert!(result.sig_bytes > 0);
+    }
+}
