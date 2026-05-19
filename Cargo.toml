@@ -1,0 +1,10 @@
+[package]
+name = "pqc_signing_benchmark"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+pqcrypto = "0.18.1"
+indicatif = "0.18.4"
+cli-table = "0.5.0"
